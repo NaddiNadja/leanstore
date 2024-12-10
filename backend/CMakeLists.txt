@@ -22,7 +22,9 @@ IF(SANI)
   target_link_libraries(leanstore asan)
 ENDIF(SANI)
 
-target_link_libraries(leanstore gflags Threads::Threads aio tbb atomic tabluate rapidjson ${Boost_LIBRARIES}) #tbb
+find_library(XNVME xnvme PATHS /usr/local/bin/xnvme)
+
+target_link_libraries(leanstore ${XNVME} gflags Threads::Threads aio tbb atomic tabluate rapidjson ${Boost_LIBRARIES}) #tbb
 
 # ---------------------------------------------------------------------------
 OPTION(PARANOID "Enable sanity checks in release mode" OFF)
