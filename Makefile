@@ -3,7 +3,7 @@
 #
 BUILD_DIR?=builddir
 TOOLBOX_DIR?=toolbox
-BDEV_PATH?=/dev/nullb0
+BDEV_PATH?=/dev/nvme0n1
 
 define default-help
 # Invoke: 'make help'
@@ -122,6 +122,25 @@ endef
 .PHONY: check-tpcc
 check-tpcc: _require_bdev
 	./$(BUILD_DIR)/frontend/tpcc --ssd_path=$(BDEV_PATH) \
+	--tpcc_warehouse_count=100 \
+	--notpcc_warehouse_affinity \
+	--worker_threads=8 \
+	--pp_threads=4 \
+	--dram_gib=8 \
+	--csv_path=./log \
+	--free_pct=1 \
+	--contention_split \
+	--xmerge \
+	--print_tx_console \
+	--run_for_seconds=10 \
+	--isolation_level=si
+
+define debug-help
+# Run the tpcc frontend/benchmark using a null-block device
+endef
+.PHONY: debug
+debug: _require_bdev
+	gdb --args ./$(BUILD_DIR)/frontend/tpcc --ssd_path=$(BDEV_PATH) \
 	--tpcc_warehouse_count=100 \
 	--notpcc_warehouse_affinity \
 	--worker_threads=8 \

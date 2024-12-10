@@ -12,7 +12,7 @@ DEFINE_bool(csv_truncate, false, "");
 DEFINE_string(ssd_path, "./leanstore", "Position of SSD, gets persisted");
 DEFINE_uint32(write_buffer_size, 1024, "");
 DEFINE_bool(trunc, false, "Truncate file");
-DEFINE_uint32(falloc, 0, "Preallocate GiB");
+DEFINE_uint32(falloc, 8, "Preallocate GiB");
 // -------------------------------------------------------------------------------------
 DEFINE_bool(print_debug, true, "");
 DEFINE_bool(print_tx_console, true, "");
