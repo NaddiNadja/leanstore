@@ -26,8 +26,14 @@ namespace storage
 // -------------------------------------------------------------------------------------
 thread_local BufferFrame* BufferManager::last_read_bf = nullptr;
 // -------------------------------------------------------------------------------------
-BufferManager::BufferManager(s32 ssd_fd) : ssd_fd(ssd_fd)
+BufferManager::BufferManager(const char *path, int flags) : 
+   path(path),
+   ssd_fd(open(path, flags, 0666)), 
+   io_engine(make_unique<IOEngine>(path))
 {
+   int err = io_engine->initialize();
+   IOEC::global_io = io_engine.get();
+   ensure(!err);
    // -------------------------------------------------------------------------------------
    // Init DRAM pool
    {
@@ -131,8 +137,8 @@ void BufferManager::writeAllBufferFrames()
             page.dt_id = bf.page.dt_id;
             page.magic_debugging_number = bf.header.pid;
             DTRegistry::global_dt_registry.checkpoint(bf.page.dt_id, bf, page.dt);
-            s64 ret = pwrite(ssd_fd, page, PAGE_SIZE, bf.header.pid * PAGE_SIZE);
-            ensure(ret == PAGE_SIZE);
+            int err = io_engine->writeSync(page, PAGE_SIZE, bf.header.pid * PAGE_SIZE);
+            ensure(!err);
          }
          bf.header.latch.mutex.unlock();
       }
@@ -426,12 +432,8 @@ BufferFrame& BufferManager::resolveSwip(Guard& swip_guard, Swip<BufferFrame>& sw
 void BufferManager::readPageSync(u64 pid, u8* destination)
 {
    paranoid(u64(destination) % 512 == 0);
-   s64 bytes_left = PAGE_SIZE;
-   do {
-      const int bytes_read = pread(ssd_fd, destination, bytes_left, pid * PAGE_SIZE + (PAGE_SIZE - bytes_left));
-      assert(bytes_read > 0);  // call was successfull?
-      bytes_left -= bytes_read;
-   } while (bytes_left > 0);
+   int err = io_engine->readSync(destination, PAGE_SIZE, pid * PAGE_SIZE);
+   ensure(!err);
    // -------------------------------------------------------------------------------------
    COUNTERS_BLOCK() { WorkerCounters::myCounters().read_operations_counter++; }
 }

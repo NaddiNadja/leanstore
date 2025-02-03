@@ -79,7 +79,7 @@ LeanStore::LeanStore()
    }
    ensure(fcntl(ssd_fd, F_GETFL) != -1);
    // -------------------------------------------------------------------------------------
-   buffer_manager = make_unique<storage::BufferManager>(ssd_fd);
+   buffer_manager = make_unique<storage::BufferManager>(FLAGS_ssd_path.c_str(), flags);
    BMC::global_bf = buffer_manager.get();
    // -------------------------------------------------------------------------------------
    DTRegistry::global_dt_registry.registerDatastructureType(0, storage::btree::BTreeLL::getMeta());

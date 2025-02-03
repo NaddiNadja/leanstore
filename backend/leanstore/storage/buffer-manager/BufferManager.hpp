@@ -2,6 +2,7 @@
 #include "BMPlainGuard.hpp"
 #include "BufferFrame.hpp"
 #include "DTRegistry.hpp"
+#include "IOEngine.hpp"
 #include "Partition.hpp"
 #include "Swip.hpp"
 #include "Units.hpp"
@@ -68,7 +69,10 @@ class BufferManager
    // -------------------------------------------------------------------------------------
    BufferFrame* bfs;
    // -------------------------------------------------------------------------------------
+   const char *path;
    const int ssd_fd;
+   const unique_ptr<IOEngine> io_engine;
+
    // -------------------------------------------------------------------------------------
    // Free  Pages
    const u8 safety_pages = 10;               // we reserve these extra pages to prevent segfaults
@@ -98,7 +102,7 @@ class BufferManager
 
   public:
    // -------------------------------------------------------------------------------------
-   BufferManager(s32 ssd_fd);
+   BufferManager(const char *path, int flags);
    ~BufferManager();
    // -------------------------------------------------------------------------------------
    BufferFrame& allocatePage();
