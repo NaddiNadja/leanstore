@@ -4,9 +4,8 @@
 #include "leanstore/profiling/counters/WorkerCounters.hpp"
 #include "leanstore/utils/Misc.hpp"
 #include "leanstore/utils/Parallelize.hpp"
+#include "leanstore/storage/buffer-manager/IOEngine.hpp"
 // -------------------------------------------------------------------------------------
-// -------------------------------------------------------------------------------------
-#include <libaio.h>
 #include <thread>
 // -------------------------------------------------------------------------------------
 using namespace std::chrono_literals;
@@ -32,24 +31,16 @@ void CRManager::groupCommiter1()
          // Async IO
          const u64 batch_max_size = (workers_range_size * 2) + 2;  // 2x because of potential wrapping around
          s32 io_slot = 0;
-         std::unique_ptr<struct iocb[]> iocbs = make_unique<struct iocb[]>(batch_max_size);
-         std::unique_ptr<struct iocb*[]> iocbs_ptr = make_unique<struct iocb*[]>(batch_max_size);
-         std::unique_ptr<struct io_event[]> events = make_unique<struct io_event[]>(batch_max_size);
-         io_context_t aio_context;
-         {
-            memset(&aio_context, 0, sizeof(aio_context));
-            const int ret = io_setup(batch_max_size, &aio_context);
-            if (ret != 0) {
-               throw ex::GenericException("io_setup failed, ret code = " + std::to_string(ret));
-            }
+         auto io_engine = leanstore::storage::IOEC::global_io;
+         auto queue = io_engine->initialiseQueue(16);
+         if (!queue) {
+            throw ex::GenericException("io_setup failed");
          }
          auto add_pwrite = [&](u8* src, u64 size, u64 offset) {
             ensure(offset % 512 == 0);
             ensure(u64(src) % 512 == 0);
             ensure(size % 512 == 0);
-            io_prep_pwrite(&iocbs[io_slot], ssd_fd, src, size, offset);
-            iocbs[io_slot].data = src;
-            iocbs_ptr[io_slot] = &iocbs[io_slot];
+            io_engine->writeAsync(src, size, offset, queue);
             io_slot++;
          };
          // -------------------------------------------------------------------------------------
@@ -120,20 +111,8 @@ void CRManager::groupCommiter1()
             if (FLAGS_wal_pwrite) {
                ensure(g_ssd_offset % 512 == 0);
                if (FLAGS_wal_pwrite) {
-                  u32 submitted = 0;
-                  u32 left = io_slot;
-                  while (left) {
-                     s32 ret_code = io_submit(aio_context, left, iocbs_ptr.get() + submitted);
-                     if (ret_code != s32(io_slot)) {
-                        cout << ret_code << "," << io_slot << "," << g_ssd_offset << endl;
-                        ensure(false);
-                     }
-                     posix_check(ret_code >= 0);
-                     submitted += ret_code;
-                     left -= ret_code;
-                  }
-                  if (submitted > 0) {
-                     const s32 done_requests = io_getevents(aio_context, submitted, submitted, events.get(), NULL);
+                  if (io_slot > 0) {
+                     const s32 done_requests = io_engine->poke(io_slot, queue);  
                      posix_check(done_requests >= 0);
                   }
                   const u64 fsync_current_value = fsync_counter.load();
@@ -210,6 +189,9 @@ void CRManager::groupCommiter1()
             // CRCounters::myCounters().gct_rounds += t_i == 0;
          }
          running_threads--;
+
+         xnvme_queue_drain(queue);
+         xnvme_queue_term(queue);
       });
    });
    for (auto& thread : writer_threads) {
